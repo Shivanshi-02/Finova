@@ -1,0 +1,215 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model User {
+  id           String        @id @default(uuid())
+  clerkUserId  String        @unique
+  email        String        @unique
+  name         String?
+  imageUrl     String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  accounts     Account[]
+  budgets      Budget?
+  transactions Transaction[]
+
+  @@map("users")
+}
+
+model Account {
+  id           String        @id @default(uuid())
+  name         String
+  type         AccountType
+  balance      Decimal       @default(0)
+  isDefault    Boolean       @default(false)
+  userId       String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  transactions Transaction[]
+
+  @@index([userId])
+  @@map("accounts")
+}
+
+model Transaction {
+  id                String             @id @default(uuid())
+  type              TransactionType
+  amount            Decimal
+  description       String?
+  date              DateTime
+  category          String
+  receiptUrl        String?
+  isRecurring       Boolean            @default(false)
+  recurringInterval RecurringInterval?
+  nextRecurringDate DateTime?
+  lastProcessed     DateTime?
+  status            TransactionStatus  @default(COMPLETED)
+  userId            String
+  accountId         String
+  createdAt         DateTime           @default(now())
+  updatedAt         DateTime           @updatedAt
+  account           Account            @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([accountId])
+  @@map("transactions")
+}
+
+model Budget {
+  id            String    @id @default(uuid())
+  amount        Decimal
+  lastAlertSent DateTime?
+  userId        String    @unique
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("budgets")
+}
+
+model Group {
+  id          String         @id @default(uuid())
+  name        String
+  description String?
+  createdBy   String
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  expenses    GroupExpense[]
+  invites     GroupInvite[]
+  members     GroupMember[]
+  settlements Settlement[]
+
+  @@map("groups")
+}
+
+model GroupMember {
+  id        String   @id @default(uuid())
+  userId    String
+  email     String
+  name      String?
+  role      String   @default("MEMBER")
+  groupId   String
+  createdAt DateTime @default(now())
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, groupId])
+  @@map("group_members")
+}
+
+model GroupExpense {
+  id          String        @id @default(uuid())
+  groupId     String
+  description String?
+  amount      Float
+  paidBy      String
+  paidByName  String?
+  splitType   String        @default("EQUAL")
+  date        DateTime      @default(now())
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+  group       Group         @relation(fields: [groupId], references: [id], onDelete: Cascade)
+  splits      SplitDetail[]
+
+  @@index([groupId])
+  @@map("group_expenses")
+}
+
+model SplitDetail {
+  id         String       @id @default(uuid())
+  expenseId  String
+  userId     String
+  userName   String?
+  amount     Float
+  percentage Float?
+  expense    GroupExpense @relation(fields: [expenseId], references: [id], onDelete: Cascade)
+
+  @@index([expenseId])
+  @@map("split_details")
+}
+
+model Settlement {
+  id           String   @id @default(uuid())
+  groupId      String
+  fromUserId   String
+  fromUserName String?
+  toUserId     String
+  toUserName   String?
+  amount       Float
+  note         String?
+  settledAt    DateTime @default(now())
+  group        Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@index([groupId])
+  @@map("settlements")
+}
+
+model GroupInvite {
+  id        String   @id @default(uuid())
+  groupId   String
+  email     String
+  invitedBy String
+  token     String   @unique @default(uuid())
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+  group     Group    @relation(fields: [groupId], references: [id], onDelete: Cascade)
+
+  @@unique([groupId, email])
+  @@index([token])
+  @@map("group_invites")
+}
+
+model GroupTransaction {
+  id          String   @id @default(uuid())
+  groupId     String
+  amount      Float
+  paidBy      String
+  description String?
+  createdAt   DateTime @default(now())
+  splits      Split[]
+
+  @@map("group_transactions")
+}
+
+model Split {
+  id            String           @id @default(uuid())
+  transactionId String
+  userId        String
+  amount        Float
+  transaction   GroupTransaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@map("splits")
+}
+
+enum TransactionType {
+  INCOME
+  EXPENSE
+}
+
+enum AccountType {
+  CURRENT
+  SAVINGS
+}
+
+enum TransactionStatus {
+  PENDING
+  COMPLETED
+  FAILED
+}
+
+enum RecurringInterval {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
